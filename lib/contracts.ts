@@ -42,7 +42,7 @@ export const TOKEN_ABI = [
     outputs: [],
     state_mutability: "external",
   },
-] as const;
+];
 
 export const POOL_ABI = [
   {
@@ -90,7 +90,7 @@ export const POOL_ABI = [
     outputs: [{ type: "core::starknet::contract_address::ContractAddress" }],
     state_mutability: "view",
   },
-] as const;
+];
 
 // ── u256 calldata helper ──────────────────────────────────────────────────────
 // Starknet u256 is two felts: [low, high]
