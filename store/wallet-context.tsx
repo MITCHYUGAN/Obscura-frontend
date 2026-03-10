@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { getStarknet } from "get-starknet-core";
-import { Contract, RpcProvider, type AccountInterface } from "starknet";
+import { RpcProvider, type AccountInterface } from "starknet";
 import { CONTRACTS, RPC_URL, TOKEN_ABI, POOL_ABI, formatAmount, shortenAddress, toU256Calldata } from "@/lib/contracts";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -16,28 +16,23 @@ export interface ConnectedWallet {
 }
 
 export interface Balances {
-  // Raw bigint values from chain
-  tokenRaw: bigint; // wallet strkBTC balance
-  shieldedRaw: bigint; // shielded balance inside pool
-  poolRaw: bigint; // total pool balance (all users)
-  // Formatted strings for display
+  tokenRaw: bigint;
+  shieldedRaw: bigint;
+  poolRaw: bigint;
   token: string;
   shielded: string;
   pool: string;
 }
 
 interface WalletContextValue {
-  // State
   status: WalletStatus;
   wallet: ConnectedWallet | null;
   balances: Balances | null;
   isLoadingBalances: boolean;
   error: string | null;
-  // Actions
   connect: () => Promise<void>;
   disconnect: () => void;
   refreshBalances: () => Promise<void>;
-  // Contract calls
   executeMint: (amount: bigint) => Promise<string>;
   executeDeposit: (amount: bigint) => Promise<string>;
   executeWithdraw: (amount: bigint) => Promise<string>;
@@ -47,6 +42,29 @@ interface WalletContextValue {
 // ── Context ───────────────────────────────────────────────────────────────────
 
 const WalletContext = createContext<WalletContextValue | null>(null);
+
+// ── Raw RPC call — bypasses starknet.js Contract entirely ─────────────────────
+// This is the most reliable way to call view functions on starknet.js v9
+async function callContract(
+  provider: RpcProvider,
+  contractAddress: string,
+  entrypoint: string,
+  calldata: string[] = []
+): Promise<bigint> {
+  try {
+    const result = await provider.callContract({
+      contractAddress,
+      entrypoint,
+      calldata,
+    });
+    // result is string[] — first element is the low felt of u256
+    if (!result || result.length === 0) return BigInt(0);
+    return BigInt(result[0]);
+  } catch (e) {
+    console.warn(`callContract ${entrypoint} failed:`, e);
+    return BigInt(0);
+  }
+}
 
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<WalletStatus>("disconnected");
@@ -64,27 +82,20 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (!wallet) return;
     setIsLoading(true);
     try {
-      //   const tokenContract = new Contract(TOKEN_ABI, CONTRACTS.token, provider.current);
-      //   const poolContract = new Contract(POOL_ABI, CONTRACTS.pool, provider.current);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const tokenContract = new (Contract as any)(CONTRACTS.token, TOKEN_ABI, provider.current);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const poolContract = new (Contract as any)(CONTRACTS.pool, POOL_ABI, provider.current);
-
+      // Use raw RPC calls — no Contract wrapper, no starknet.js quirks
       const [tokenRaw, shieldedRaw, poolRaw] = await Promise.all([
-        tokenContract.balance_of(wallet.address).then(toSafeBigint),
-        poolContract.get_shielded_balance(wallet.address).then(toSafeBigint),
-        poolContract.get_pool_balance().then(toSafeBigint),
+        callContract(provider.current, CONTRACTS.token, "balance_of", [wallet.address]),
+        callContract(provider.current, CONTRACTS.pool,  "get_shielded_balance", [wallet.address]),
+        callContract(provider.current, CONTRACTS.pool,  "get_pool_balance", []),
       ]);
 
       setBalances({
         tokenRaw,
         shieldedRaw,
         poolRaw,
-        token: formatAmount(tokenRaw),
+        token:    formatAmount(tokenRaw),
         shielded: formatAmount(shieldedRaw),
-        pool: formatAmount(poolRaw),
+        pool:     formatAmount(poolRaw),
       });
     } catch (e) {
       console.warn("Balance refresh failed:", e);
@@ -106,9 +117,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const sn = getStarknet();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const wallets: any[] = await sn.getAvailableWallets();
-      if (!wallets.length) {
-        throw new Error("No Starknet wallet found. Install Argent X or Braavos.");
-      }
+      if (!wallets.length) throw new Error("No Starknet wallet found. Install Argent X or Braavos.");
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const chosen: any = wallets.find((w: any) => w.id?.includes("argent")) ?? wallets[0];
@@ -142,104 +151,75 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setError(null);
   }, []);
 
-  // ── Contract calls ───────────────────────────────────────────────────────────
+  // ── Contract calls ────────────────────────────────────────────────────────────
 
-  // Mint mock strkBTC (testnet faucet)
-  const executeMint = useCallback(
-    async (amount: bigint): Promise<string> => {
-      if (!account) throw new Error("Wallet not connected");
-      const { transaction_hash } = await account.execute([
-        {
-          contractAddress: CONTRACTS.token,
-          entrypoint: "mint",
-          calldata: [account.address, ...toU256Calldata(amount)],
-        },
-      ]);
-      await provider.current.waitForTransaction(transaction_hash);
-      await refreshBalances();
-      return transaction_hash;
-    },
-    [account, refreshBalances],
-  );
+  const executeMint = useCallback(async (amount: bigint): Promise<string> => {
+    if (!account) throw new Error("Wallet not connected");
+    const { transaction_hash } = await account.execute([
+      {
+        contractAddress: CONTRACTS.token,
+        entrypoint: "mint",
+        calldata: [account.address, ...toU256Calldata(amount)],
+      },
+    ]);
+    await provider.current.waitForTransaction(transaction_hash);
+    await refreshBalances();
+    return transaction_hash;
+  }, [account, refreshBalances]);
 
-  // Deposit: approve then deposit in one multicall
-  const executeDeposit = useCallback(
-    async (amount: bigint): Promise<string> => {
-      if (!account) throw new Error("Wallet not connected");
-      const { transaction_hash } = await account.execute([
-        // Step 1: approve pool to spend tokens
-        {
-          contractAddress: CONTRACTS.token,
-          entrypoint: "approve",
-          calldata: [CONTRACTS.pool, ...toU256Calldata(amount)],
-        },
-        // Step 2: deposit into pool
-        {
-          contractAddress: CONTRACTS.pool,
-          entrypoint: "deposit",
-          calldata: toU256Calldata(amount),
-        },
-      ]);
-      await provider.current.waitForTransaction(transaction_hash);
-      await refreshBalances();
-      return transaction_hash;
-    },
-    [account, refreshBalances],
-  );
+  const executeDeposit = useCallback(async (amount: bigint): Promise<string> => {
+    if (!account) throw new Error("Wallet not connected");
+    const { transaction_hash } = await account.execute([
+      {
+        contractAddress: CONTRACTS.token,
+        entrypoint: "approve",
+        calldata: [CONTRACTS.pool, ...toU256Calldata(amount)],
+      },
+      {
+        contractAddress: CONTRACTS.pool,
+        entrypoint: "deposit",
+        calldata: toU256Calldata(amount),
+      },
+    ]);
+    await provider.current.waitForTransaction(transaction_hash);
+    await refreshBalances();
+    return transaction_hash;
+  }, [account, refreshBalances]);
 
-  // Withdraw from pool back to wallet
-  const executeWithdraw = useCallback(
-    async (amount: bigint): Promise<string> => {
-      if (!account) throw new Error("Wallet not connected");
-      const { transaction_hash } = await account.execute([
-        {
-          contractAddress: CONTRACTS.pool,
-          entrypoint: "withdraw",
-          calldata: toU256Calldata(amount),
-        },
-      ]);
-      await provider.current.waitForTransaction(transaction_hash);
-      await refreshBalances();
-      return transaction_hash;
-    },
-    [account, refreshBalances],
-  );
+  const executeWithdraw = useCallback(async (amount: bigint): Promise<string> => {
+    if (!account) throw new Error("Wallet not connected");
+    const { transaction_hash } = await account.execute([
+      {
+        contractAddress: CONTRACTS.pool,
+        entrypoint: "withdraw",
+        calldata: toU256Calldata(amount),
+      },
+    ]);
+    await provider.current.waitForTransaction(transaction_hash);
+    await refreshBalances();
+    return transaction_hash;
+  }, [account, refreshBalances]);
 
-  // Private transfer inside the pool (no on-chain trace)
-  const executePrivateTransfer = useCallback(
-    async (recipient: string, amount: bigint): Promise<string> => {
-      if (!account) throw new Error("Wallet not connected");
-      const { transaction_hash } = await account.execute([
-        {
-          contractAddress: CONTRACTS.pool,
-          entrypoint: "private_transfer",
-          calldata: [recipient, ...toU256Calldata(amount)],
-        },
-      ]);
-      await provider.current.waitForTransaction(transaction_hash);
-      await refreshBalances();
-      return transaction_hash;
-    },
-    [account, refreshBalances],
-  );
+  const executePrivateTransfer = useCallback(async (recipient: string, amount: bigint): Promise<string> => {
+    if (!account) throw new Error("Wallet not connected");
+    const { transaction_hash } = await account.execute([
+      {
+        contractAddress: CONTRACTS.pool,
+        entrypoint: "private_transfer",
+        calldata: [recipient, ...toU256Calldata(amount)],
+      },
+    ]);
+    await provider.current.waitForTransaction(transaction_hash);
+    await refreshBalances();
+    return transaction_hash;
+  }, [account, refreshBalances]);
 
   return (
-    <WalletContext.Provider
-      value={{
-        status,
-        wallet,
-        balances,
-        isLoadingBalances,
-        error,
-        connect,
-        disconnect,
-        refreshBalances,
-        executeMint,
-        executeDeposit,
-        executeWithdraw,
-        executePrivateTransfer,
-      }}
-    >
+    <WalletContext.Provider value={{
+      status, wallet, balances, isLoadingBalances, error,
+      connect, disconnect, refreshBalances,
+      executeMint, executeDeposit, executeWithdraw, executePrivateTransfer,
+    }}>
       {children}
     </WalletContext.Provider>
   );
@@ -249,17 +229,4 @@ export function useWallet() {
   const ctx = useContext(WalletContext);
   if (!ctx) throw new Error("useWallet must be used inside WalletProvider");
   return ctx;
-}
-
-// ── Helper: safely convert starknet.js v9 u256 response to bigint ─────────────
-// starknet.js v9 returns u256 as a single bigint directly
-// but older responses may return { low, high } — handle both
-function toSafeBigint(value: unknown): bigint {
-  if (typeof value === "bigint") return value;
-  if (typeof value === "number") return BigInt(value);
-  if (typeof value === "string") return BigInt(value);
-  if (typeof value === "object" && value !== null && "low" in value) {
-    return BigInt((value as { low: bigint | string }).low);
-  }
-  return 0n;
 }
