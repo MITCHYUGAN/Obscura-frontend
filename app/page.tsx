@@ -245,10 +245,11 @@ function TechStack() {
         <p className="text-sm font-mono text-vault-400 uppercase tracking-widest mb-6 text-center">Built with</p>
         <div className="flex flex-wrap justify-center gap-2">
           {[
-            ["Cairo", "Smart contracts"], ["Starknet", "L2 ZK rollup"],
-            ["ShieldedPool", "Privacy layer"], ["Next.js 15", "React framework"],
-            ["starknet.js v9", "Client SDK"], ["Argent X / Braavos", "Wallets"],
+            ["Starknet", "L2 ZK rollup"], ["Cairo", "Smart contracts"], ["Starkzap", "SDK"],
+            ["ShieldedPool", "Privacy layer"], ["Argent X / Braavos", "Wallets"], 
             ["OpenZeppelin", "ERC20 standard"],
+            // ["starknet.js v9", "Client SDK"],
+            ["Next.js 15", "React framework"],
           ].map(([name, desc]) => (
             <div key={name} className="px-4 py-2 rounded-lg border border-border/50 bg-secondary/30 flex items-center gap-2 text-sm hover:border-vault-700/40 hover:bg-vault-950/20 transition-all">
               <Layers className="w-3.5 h-3.5 text-vault-500/60" />
