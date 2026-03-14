@@ -67,7 +67,7 @@ function ConnectPrompt() {
       </div>
       <h3 className="font-display font-semibold text-2xl mb-3">Connect your wallet</h3>
       <p className="text-lg text-muted-foreground mb-8">
-        Supports Argent X and Braavos on Starknet Sepolia
+        Supports Ready and Braavos on Starknet Sepolia
       </p>
       <button
         onClick={connect}

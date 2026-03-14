@@ -8,7 +8,7 @@ const jetbrains = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", 
 const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-body", weight: ["300","400","500"], display: "swap" });
 
 export const metadata: Metadata = {
-  title: "ZapVault — Private strkBTC Payments on Starknet",
+  title: "Obscura — Private strkBTC Payments on Starknet",
   description: "Deposit strkBTC and receive a shielded note. Withdraw to any address with no on-chain link.",
 };
 

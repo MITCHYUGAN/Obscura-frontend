@@ -128,7 +128,7 @@ function Stats() {
 // ── How It Works ──────────────────────────────────────────────────────────────
 function HowItWorks() {
   const steps = [
-    { n: "01", icon: <ArrowDownToLine className="w-5 h-5" />, title: "Deposit strkBTC",      color: "vault",  body: "Connect your Argent X or Braavos wallet. Approve the pool to spend your strkBTC and deposit any amount. The deposit is public on-chain but fully unlinked from any future transfers." },
+    { n: "01", icon: <ArrowDownToLine className="w-5 h-5" />, title: "Deposit strkBTC",      color: "vault",  body: "Connect your Ready or Braavos wallet. Approve the pool to spend your strkBTC and deposit any amount. The deposit is public on-chain but fully unlinked from any future transfers." },
     { n: "02", icon: <Shield className="w-5 h-5" />,          title: "Funds enter the pool",  color: "shield", body: "Your strkBTC is now held inside the ShieldedPool contract. Your balance is tracked privately — no observer can link your shielded balance to future transfers without your address." },
     { n: "03", icon: <Send className="w-5 h-5" />,            title: "Transfer privately",    color: "btc",    body: "Send strkBTC to any other address inside the pool. This operation emits zero events — there is literally no on-chain record of the transfer happening." },
     { n: "04", icon: <ArrowUpFromLine className="w-5 h-5" />, title: "Withdraw anywhere",     color: "vault",  body: "Withdraw your shielded balance to any Starknet address — including a fresh wallet. Withdrawal is public but the origin of the funds is completely unlinkable." },
@@ -246,7 +246,7 @@ function TechStack() {
         <div className="flex flex-wrap justify-center gap-2">
           {[
             ["Starknet", "L2 ZK rollup"], ["Cairo", "Smart contracts"], ["Starkzap", "SDK"],
-            ["ShieldedPool", "Privacy layer"], ["Argent X / Braavos", "Wallets"], 
+            ["ShieldedPool", "Privacy layer"], ["Ready / Braavos", "Wallets"], 
             ["OpenZeppelin", "ERC20 standard"],
             // ["starknet.js v9", "Client SDK"],
             ["Next.js 15", "React framework"],

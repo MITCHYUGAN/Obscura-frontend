@@ -120,7 +120,7 @@ Obscura/
 - [Scarb](https://docs.swmansion.com/scarb/) 2.16.0
 - [Starknet Foundry](https://foundry-rs.github.io/starknet-foundry/) 0.57.0
 - Node.js 18+
-- Argent X or Braavos browser wallet
+- Ready or Braavos browser wallet
 
 ### Run the frontend
 
@@ -169,7 +169,7 @@ NEXT_PUBLIC_RPC_URL=https://api.zan.top/public/starknet-sepolia/rpc/v0_10
 | Testing | Starknet Foundry (snforge) |
 | Frontend | Next.js 15, TypeScript, Tailwind v4 |
 | Wallet connection | get-starknet-core, starknet.js v9 |
-| Wallets supported | Argent X, Braavos |
+| Wallets supported | Ready, Braavos |
 | Network | Starknet Sepolia |
 
 ---

@@ -12,7 +12,7 @@ export type WalletStatus = "disconnected" | "connecting" | "connected" | "error"
 export interface ConnectedWallet {
   address: string;
   shortAddress: string;
-  walletType: "argent" | "braavos" | "unknown";
+  walletType: "ready" | "braavos" | "unknown";
 }
 
 export interface Balances {
@@ -117,10 +117,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       const sn = getStarknet();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const wallets: any[] = await sn.getAvailableWallets();
-      if (!wallets.length) throw new Error("No Starknet wallet found. Install Argent X or Braavos.");
+      if (!wallets.length) throw new Error("No Starknet wallet found. Install Ready or Braavos.");
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const chosen: any = wallets.find((w: any) => w.id?.includes("argent")) ?? wallets[0];
+      const chosen: any = wallets.find((w: any) => w.id?.includes("ready")) ?? wallets[0];
       await chosen.enable({ starknetVersion: "v5" });
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -129,7 +129,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
       const address: string = acc.address as string;
       const id: string = (chosen.id as string) ?? "";
-      const walletType = id.includes("argent") ? "argent" : id.includes("braavos") ? "braavos" : "unknown";
+      const walletType = id.includes("ready") ? "ready" : id.includes("braavos") ? "braavos" : "unknown";
 
       setAccount(acc as AccountInterface);
       setWallet({ address, shortAddress: shortenAddress(address), walletType });
