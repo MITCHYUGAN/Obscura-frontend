@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { getStarknet } from "get-starknet-core";
 import { RpcProvider, type AccountInterface } from "starknet";
-import { CONTRACTS, RPC_URL, TOKEN_ABI, POOL_ABI, formatAmount, shortenAddress, toU256Calldata } from "@/lib/contracts";
+import { CONTRACTS, RPC_URL, formatAmount, shortenAddress, toU256Calldata } from "@/lib/contracts";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
