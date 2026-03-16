@@ -4,10 +4,11 @@ import { useState } from "react";
 import Link from "next/link";
 import {
   Shield, ArrowDownToLine, ArrowUpFromLine, Send, Droplets,
-  ChevronLeft, AlertTriangle, Copy, Check, LogOut, Wifi,
+  ChevronLeft, AlertTriangle, Copy, Check, LogOut,
   ExternalLink, Wallet, RefreshCw,
 } from "lucide-react";
 import { useWallet } from "@/store/wallet-context";
+import { ConnectButton } from "@/components/frontend/connect-button";
 import {
   explorerAddress, explorerTx, isValidAddress,
   isValidAmount, parseAmount, formatAmount,
@@ -59,22 +60,18 @@ function TxBanner({ tx }: { tx: TxState }) {
 
 // ── Connect Prompt ────────────────────────────────────────────────────────────
 function ConnectPrompt() {
-  const { connect } = useWallet();
   return (
     <div className="rounded-2xl border border-border/50 bg-card p-16 text-center">
       <div className="w-20 h-20 rounded-2xl bg-vault-950/40 border border-vault-700/30 flex items-center justify-center mx-auto mb-6">
         <Shield className="w-9 h-9 text-vault-500/50" />
       </div>
-      <h3 className="font-display font-semibold text-2xl mb-3">Connect your wallet</h3>
+      <h3 className="font-display font-semibold text-2xl mb-3">Connect to get started</h3>
       <p className="text-lg text-muted-foreground mb-8">
-        Supports Ready and Braavos on Starknet Sepolia
+        Use your browser wallet or sign in with Google
       </p>
-      <button
-        onClick={connect}
-        className="flex items-center gap-2 mx-auto px-8 py-4 rounded-xl bg-vault-500 hover:bg-vault-400 text-black font-semibold transition-all text-lg"
-      >
-        <Wifi className="w-5 h-5" /> Connect Wallet
-      </button>
+      <div className="flex flex-col gap-3 items-center">
+        <ConnectButton />
+      </div>
     </div>
   );
 }
@@ -87,7 +84,7 @@ const NAV: { id: Tab; icon: React.ReactNode; label: string }[] = [
 ];
 
 function Sidebar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
-  const { status, wallet, connect, disconnect } = useWallet();
+  const { status, wallet, disconnect } = useWallet();
   const [copied, setCopied] = useState(false);
 
   const copy = () => {
@@ -148,7 +145,7 @@ function Sidebar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
           </div>
         </div>
 
-        {/* Faucet — separated at the very bottom of nav */}
+        {/* Faucet */}
         <div className="pt-5 mt-auto">
           <p className="text-xs font-mono text-muted-foreground/50 uppercase tracking-widest px-2 mb-3">
             Testnet Tools
@@ -168,20 +165,30 @@ function Sidebar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
         </div>
       </nav>
 
-      {/* Wallet section */}
+      {/* ── Wallet section — NOW uses ConnectButton ── */}
       <div className="p-3 border-t border-border/40">
         {status === "connected" && wallet ? (
+          // Connected: show address + actions
           <div className="rounded-xl border border-border/50 bg-secondary/30 p-3 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground font-mono uppercase tracking-widest">Connected</span>
+              <span className="text-xs text-muted-foreground font-mono uppercase tracking-widest">
+                Connected
+              </span>
               <span className="text-xs px-1.5 py-0.5 rounded-full bg-vault-500/15 text-vault-400 border border-vault-700/30 font-mono">
                 {wallet.walletType}
               </span>
             </div>
-            <div className="font-mono text-sm text-foreground/80 truncate">{wallet.shortAddress}</div>
+            <div className="font-mono text-sm text-foreground/80 truncate">
+              {wallet.shortAddress}
+            </div>
             <div className="flex items-center gap-1">
-              <button onClick={copy} className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
-                {copied ? <Check className="w-3.5 h-3.5 text-vault-400" /> : <Copy className="w-3.5 h-3.5" />}
+              <button
+                onClick={copy}
+                className="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {copied
+                  ? <Check className="w-3.5 h-3.5 text-vault-400" />
+                  : <Copy className="w-3.5 h-3.5" />}
               </button>
               
               <a
@@ -201,16 +208,8 @@ function Sidebar({ tab, setTab }: { tab: Tab; setTab: (t: Tab) => void }) {
             </div>
           </div>
         ) : (
-          <button
-            onClick={connect}
-            disabled={status === "connecting"}
-            className="w-full flex items-center justify-center gap-2 py-3 px-3 rounded-xl bg-vault-500 hover:bg-vault-400 text-black text-base font-semibold transition-all disabled:opacity-50"
-          >
-            {status === "connecting"
-              ? <><div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />Connecting...</>
-              : <><Wifi className="w-4 h-4" />Connect Wallet</>
-            }
-          </button>
+          // Not connected: show BOTH buttons via ConnectButton
+          <ConnectButton />
         )}
         <Link
           href="/"
@@ -242,9 +241,9 @@ function BalanceCards() {
       </div>
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Wallet Balance",   value: balances?.token    ?? "—", unit: "strkBTC", icon: <Wallet className="w-4 h-4" />,          color: "text-orange-400" },
-          { label: "Shielded Balance", value: balances?.shielded ?? "—", unit: "strkBTC", icon: <Shield className="w-4 h-4" />,           color: "text-vault-400" },
-          { label: "Total Pool",       value: balances?.pool     ?? "—", unit: "strkBTC", icon: <ArrowDownToLine className="w-4 h-4" />,  color: "text-purple-400" },
+          { label: "Wallet Balance",   value: balances?.token    ?? "—", unit: "strkBTC", icon: <Wallet className="w-4 h-4" />,         color: "text-orange-400" },
+          { label: "Shielded Balance", value: balances?.shielded ?? "—", unit: "strkBTC", icon: <Shield className="w-4 h-4" />,          color: "text-vault-400" },
+          { label: "Total Pool",       value: balances?.pool     ?? "—", unit: "strkBTC", icon: <ArrowDownToLine className="w-4 h-4" />, color: "text-purple-400" },
         ].map(({ label, value, unit, icon, color }) => (
           <div key={label} className="rounded-xl border border-border/50 bg-card p-4">
             <div className="flex items-center justify-between mb-2">
@@ -262,7 +261,7 @@ function BalanceCards() {
   );
 }
 
-// ── Amount Input Block ────────────────────────────────────────────────────────
+// ── Amount Input ──────────────────────────────────────────────────────────────
 function AmountInput({
   value, onChange, maxRaw, shieldedLabel, disabled,
 }: {
@@ -341,19 +340,12 @@ function DepositTab() {
     <div className="rounded-2xl border border-border/50 bg-card p-7 space-y-6">
       <div>
         <h3 className="font-display font-semibold text-xl">Deposit strkBTC</h3>
-        <p className="text-base text-muted-foreground mt-1">
-          Move strkBTC from your wallet into the shielded pool.
-        </p>
+        <p className="text-base text-muted-foreground mt-1">Move strkBTC from your wallet into the shielded pool.</p>
       </div>
-
       <div className="flex gap-3 p-4 rounded-xl bg-vault-950/30 border border-vault-800/30 text-sm text-vault-400/80">
         <Shield className="w-4 h-4 flex-shrink-0 mt-0.5" />
-        <span>
-          Depositing is <strong className="text-vault-300">public</strong> — the amount is visible on-chain.
-          Once inside the pool, transfers are completely private.
-        </span>
+        <span>Depositing is <strong className="text-vault-300">public</strong> — the amount is visible on-chain. Once inside the pool, transfers are completely private.</span>
       </div>
-
       <AmountInput
         value={amount}
         onChange={v => { setAmount(v); if (tx.status !== "idle") setTx({ status: "idle" }); }}
@@ -361,9 +353,7 @@ function DepositTab() {
         shieldedLabel="Available"
         disabled={isBusy}
       />
-
       <TxBanner tx={tx} />
-
       <button
         onClick={handleDeposit}
         disabled={!canDeposit}
@@ -371,8 +361,7 @@ function DepositTab() {
       >
         {isBusy
           ? <><div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />{tx.status === "pending" ? "Signing..." : "Confirming..."}</>
-          : <><ArrowDownToLine className="w-5 h-5" />Deposit to Shielded Pool</>
-        }
+          : <><ArrowDownToLine className="w-5 h-5" />Deposit to Shielded Pool</>}
       </button>
     </div>
   );
@@ -408,19 +397,12 @@ function WithdrawTab() {
     <div className="rounded-2xl border border-border/50 bg-card p-7 space-y-6">
       <div>
         <h3 className="font-display font-semibold text-xl">Withdraw strkBTC</h3>
-        <p className="text-base text-muted-foreground mt-1">
-          Move strkBTC from the shielded pool back to your wallet.
-        </p>
+        <p className="text-base text-muted-foreground mt-1">Move strkBTC from the shielded pool back to your wallet.</p>
       </div>
-
       <div className="flex gap-3 p-4 rounded-xl bg-purple-950/30 border border-purple-800/30 text-sm text-purple-400/80">
         <ArrowUpFromLine className="w-4 h-4 flex-shrink-0 mt-0.5" />
-        <span>
-          Withdrawal is <strong className="text-purple-300">public</strong> — the amount is visible.
-          There is no on-chain link between your deposit and this withdrawal.
-        </span>
+        <span>Withdrawal is <strong className="text-purple-300">public</strong> — the amount is visible. There is no on-chain link between your deposit and this withdrawal.</span>
       </div>
-
       <AmountInput
         value={amount}
         onChange={v => { setAmount(v); if (tx.status !== "idle") setTx({ status: "idle" }); }}
@@ -428,9 +410,7 @@ function WithdrawTab() {
         shieldedLabel="Shielded"
         disabled={isBusy}
       />
-
       <TxBanner tx={tx} />
-
       <button
         onClick={handleWithdraw}
         disabled={!canWithdraw}
@@ -438,8 +418,7 @@ function WithdrawTab() {
       >
         {isBusy
           ? <><div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />{tx.status === "pending" ? "Signing..." : "Confirming..."}</>
-          : <><ArrowUpFromLine className="w-5 h-5" />Withdraw from Pool</>
-        }
+          : <><ArrowUpFromLine className="w-5 h-5" />Withdraw from Pool</>}
       </button>
     </div>
   );
@@ -478,24 +457,14 @@ function TransferTab() {
     <div className="rounded-2xl border border-border/50 bg-card p-7 space-y-6">
       <div>
         <h3 className="font-display font-semibold text-xl">Private Transfer</h3>
-        <p className="text-base text-muted-foreground mt-1">
-          Send strkBTC to any address inside the pool. Zero on-chain trace.
-        </p>
+        <p className="text-base text-muted-foreground mt-1">Send strkBTC to any address inside the pool. Zero on-chain trace.</p>
       </div>
-
       <div className="flex gap-3 p-4 rounded-xl bg-vault-950/30 border border-vault-800/30 text-sm text-vault-400/80">
         <Shield className="w-4 h-4 flex-shrink-0 mt-0.5" />
-        <span>
-          This transfer emits <strong className="text-vault-300">zero events</strong>.
-          There is no on-chain record that this transfer happened at all.
-        </span>
+        <span>This transfer emits <strong className="text-vault-300">zero events</strong>. There is no on-chain record that this transfer happened at all.</span>
       </div>
-
-      {/* Recipient */}
       <div className="space-y-2">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-widest">
-          Recipient Address
-        </label>
+        <label className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Recipient Address</label>
         <input
           type="text"
           placeholder="0x04d6c4..."
@@ -508,7 +477,6 @@ function TransferTab() {
           <p className="text-sm text-red-400">Invalid Starknet address</p>
         )}
       </div>
-
       <AmountInput
         value={amount}
         onChange={v => { setAmount(v); if (tx.status !== "idle") setTx({ status: "idle" }); }}
@@ -516,9 +484,7 @@ function TransferTab() {
         shieldedLabel="Shielded"
         disabled={isBusy}
       />
-
       <TxBanner tx={tx} />
-
       <button
         onClick={handleTransfer}
         disabled={!canTransfer}
@@ -526,8 +492,7 @@ function TransferTab() {
       >
         {isBusy
           ? <><div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />{tx.status === "pending" ? "Signing..." : "Confirming..."}</>
-          : <><Send className="w-5 h-5" />Send Privately</>
-        }
+          : <><Send className="w-5 h-5" />Send Privately</>}
       </button>
     </div>
   );
@@ -552,7 +517,6 @@ function FaucetTab() {
       const hash = await executeMint(parseAmount(amount));
       setTx({ status: "success", hash });
       setAmount("1.00000000");
-      // Refresh balances after confirmation so wallet balance updates
       setTimeout(() => refreshBalances(), 2500);
     } catch (err) {
       setTx({ status: "error", error: err instanceof Error ? err.message : "Mint failed" });
@@ -563,23 +527,14 @@ function FaucetTab() {
     <div className="rounded-2xl border border-border/50 bg-card p-7 space-y-6">
       <div>
         <h3 className="font-display font-semibold text-xl">Testnet Faucet</h3>
-        <p className="text-base text-muted-foreground mt-1">
-          Mint free mock strkBTC to your wallet for testing.
-        </p>
+        <p className="text-base text-muted-foreground mt-1">Mint free mock strkBTC to your wallet for testing.</p>
       </div>
-
       <div className="flex gap-3 p-4 rounded-xl bg-orange-950/20 border border-orange-800/30 text-sm text-orange-400/80">
         <Droplets className="w-4 h-4 flex-shrink-0 mt-0.5" />
-        <span>
-          This is a <strong className="text-orange-300">testnet faucet</strong>. Tokens have no real value.
-          Use them to test deposits, withdrawals, and private transfers.
-        </span>
+        <span>This is a <strong className="text-orange-300">testnet faucet</strong>. Tokens have no real value. Use them to test deposits, withdrawals, and private transfers.</span>
       </div>
-
       <div className="space-y-3">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-widest">
-          Amount to Mint
-        </label>
+        <label className="text-sm font-medium text-muted-foreground uppercase tracking-widest">Amount to Mint</label>
         <div className="relative">
           <input
             type="number" min="0" step="0.00000001" placeholder="1.00000000"
@@ -603,9 +558,7 @@ function FaucetTab() {
           ))}
         </div>
       </div>
-
       <TxBanner tx={tx} />
-
       <button
         onClick={handleMint}
         disabled={!canMint}
@@ -613,8 +566,7 @@ function FaucetTab() {
       >
         {isBusy
           ? <><div className="w-5 h-5 border-2 border-black/20 border-t-black rounded-full animate-spin" />{tx.status === "pending" ? "Signing..." : "Confirming..."}</>
-          : <><Droplets className="w-5 h-5" />Mint strkBTC</>
-        }
+          : <><Droplets className="w-5 h-5" />Mint strkBTC</>}
       </button>
     </div>
   );
@@ -622,10 +574,10 @@ function FaucetTab() {
 
 // ── Header bar ────────────────────────────────────────────────────────────────
 const TAB_INFO: Record<Tab, { title: string; sub: string }> = {
-  deposit:  { title: "Deposit strkBTC",   sub: "Shield your funds into the privacy pool" },
-  withdraw: { title: "Withdraw strkBTC",  sub: "Move shielded funds back to your wallet" },
-  transfer: { title: "Private Transfer",  sub: "Send shielded funds with zero on-chain trace" },
-  faucet:   { title: "Testnet Faucet",    sub: "Mint free mock strkBTC for testing" },
+  deposit:  { title: "Deposit strkBTC",  sub: "Shield your funds into the privacy pool" },
+  withdraw: { title: "Withdraw strkBTC", sub: "Move shielded funds back to your wallet" },
+  transfer: { title: "Private Transfer", sub: "Send shielded funds with zero on-chain trace" },
+  faucet:   { title: "Testnet Faucet",   sub: "Mint free mock strkBTC for testing" },
 };
 
 // ── App Page ──────────────────────────────────────────────────────────────────
@@ -665,7 +617,6 @@ export default function AppPage() {
 
         <div className="px-8 py-6 max-w-2xl">
           {isConnected && <BalanceCards />}
-
           {tab === "deposit"  && <DepositTab />}
           {tab === "withdraw" && <WithdrawTab />}
           {tab === "transfer" && <TransferTab />}

@@ -38,17 +38,23 @@ export async function POST(request: Request) {
       // If you omit this, it creates a server-managed wallet not tied to a user
     });
 
+    const walletData = wallet as typeof wallet & {
+      public_key?: string;
+      publicKey?: string;
+    };
+
     // Return the wallet info to the browser
     // NOTE: We only return address and public key — NEVER the private key
     return NextResponse.json({
       wallet: {
-        id: wallet.id, // Privy's internal wallet ID (used for signing)
-        address: wallet.address, // The Starknet address
-        publicKey: (wallet as any).public_key ?? (wallet as any).publicKey,
+        id: wallet.id,
+        address: wallet.address,
+        publicKey: walletData.public_key ?? walletData.publicKey ?? "",
       },
     });
-  } catch (error: any) {
-    console.error("Wallet creation error:", error);
-    return NextResponse.json({ error: error.message ?? "Failed to create wallet" }, { status: 500 });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Failed to create wallet";
+    console.error("Wallet creation error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

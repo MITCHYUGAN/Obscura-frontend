@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@privy-io/node": "^0.11.0",
+    "@privy-io/react-auth": "^3.17.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "get-starknet-core": "^4.0.0",

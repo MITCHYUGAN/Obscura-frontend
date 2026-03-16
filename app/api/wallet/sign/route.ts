@@ -37,8 +37,9 @@ export async function POST(request: Request) {
 
     // Return the signature to StarkZap
     return NextResponse.json({ signature: result.signature });
-  } catch (error: any) {
-    console.error("Signing error:", error);
-    return NextResponse.json({ error: error.message ?? "Signing failed" }, { status: 500 });
+  } catch (error: unknown) {
+    const msg = error instanceof Error ? error.message : "Signing failed";
+    console.error("Signing error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
