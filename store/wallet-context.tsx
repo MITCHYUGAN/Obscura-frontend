@@ -1,15 +1,5 @@
 "use client";
 
-// This is the central brain of the app's wallet state.
-// Every component that needs to know "is a wallet connected?" or
-// "execute this transaction" goes through here.
-
-// We now support TWO connection methods:
-// Method A: Browser wallet (Ready / Braavos)
-// Method B: Social login (Google / Email) via Privy + StarkZap
-
-// Both methods produce the same result: an `account` that can sign txs.
-
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getStarknet } from "get-starknet-core";
@@ -19,9 +9,7 @@ import { CONTRACTS, RPC_URL, formatAmount, shortenAddress, toU256Calldata } from
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-// How is the user connected?
 export type ConnectionMethod = "browser_wallet" | "social";
-
 export type WalletStatus = "disconnected" | "connecting" | "connected" | "error";
 
 export interface ConnectedWallet {
@@ -49,8 +37,8 @@ interface WalletContextValue {
   connect: () => Promise<void>;
   connectSocial: () => Promise<void>;
   disconnect: () => void;
-  refreshBalances: () => Promise<void>;
   resetStatus: () => void;
+  refreshBalances: () => Promise<void>;
   executeMint: (amount: bigint) => Promise<string>;
   executeDeposit: (amount: bigint) => Promise<string>;
   executeWithdraw: (amount: bigint) => Promise<string>;
@@ -61,16 +49,16 @@ interface WalletContextValue {
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 
-// ── Raw RPC call — bypasses starknet.js Contract entirely ─────────────────────
-// This is the most reliable way to call view functions on starknet.js v9
-async function callContract(provider: RpcProvider, contractAddress: string, entrypoint: string, calldata: string[] = []): Promise<bigint> {
+// ── Raw RPC helper ────────────────────────────────────────────────────────────
+
+async function callContract(
+  provider: RpcProvider,
+  contractAddress: string,
+  entrypoint: string,
+  calldata: string[] = []
+): Promise<bigint> {
   try {
-    const result = await provider.callContract({
-      contractAddress,
-      entrypoint,
-      calldata,
-    });
-    // result is string[] — first element is the low felt of u256
+    const result = await provider.callContract({ contractAddress, entrypoint, calldata });
     if (!result || result.length === 0) return BigInt(0);
     return BigInt(result[0]);
   } catch (e) {
@@ -89,14 +77,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const [isLoadingBalances, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // RPC provider — used for read-only balance calls
   const provider = useRef(new RpcProvider({ nodeUrl: RPC_URL }));
-
-  // Privy hook — gives us login(), logout(), user, and getAccessToken()
-  // This is how we trigger the Google login popup
   const { login, logout, ready: privyReady, authenticated, user, getAccessToken } = usePrivy();
 
-  // ── Balance reading  ────────────────────────────────────────────────────────────────
+  // ── Balances ──────────────────────────────────────────────────────────────
 
   const refreshBalances = useCallback(async () => {
     if (!wallet) return;
@@ -107,11 +91,8 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         callContract(provider.current, CONTRACTS.pool, "get_shielded_balance", [wallet.address]),
         callContract(provider.current, CONTRACTS.pool, "get_pool_balance", []),
       ]);
-
       setBalances({
-        tokenRaw,
-        shieldedRaw,
-        poolRaw,
+        tokenRaw, shieldedRaw, poolRaw,
         token: formatAmount(tokenRaw),
         shielded: formatAmount(shieldedRaw),
         pool: formatAmount(poolRaw),
@@ -127,8 +108,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     if (status === "connected") refreshBalances();
   }, [status, refreshBalances]);
 
-  // ── Connect ─────────────────────────────────────────────────────────────────
-  // ── Method A: Browser Wallet (Ready / Braavos) ─────
+  // ── Method A: Browser Wallet ──────────────────────────────────────────────
 
   const connect = useCallback(async () => {
     setStatus("connecting");
@@ -138,19 +118,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const wallets: any[] = await sn.getAvailableWallets();
       if (!wallets.length) throw new Error("No Starknet wallet found. Install Ready or Braavos.");
-
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const chosen: any = wallets.find((w: any) => w.id?.includes("ready")) ?? wallets[0];
       await chosen.enable({ starknetVersion: "v5" });
-
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const acc: any = chosen.account;
       if (!acc) throw new Error("Wallet did not return an account.");
-
       const address: string = acc.address as string;
       const id: string = (chosen.id as string) ?? "";
       const walletType = id.includes("ready") ? "ready" : id.includes("braavos") ? "braavos" : "unknown";
-
       setAccount(acc as AccountInterface);
       setWallet({ address, shortAddress: shortenAddress(address), walletType, connectionMethod: "browser_wallet" });
       setStatus("connected");
@@ -161,27 +137,15 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  // ── Method B: Social Login (Google / Email via Privy + StarkZap) ─────
-  // HOW IT WORKS:
-  // 1. We call privy.login() → Google OAuth popup appears
-  // 2. User signs in with Google
-  // 3. Privy tells us the user is authenticated (via useEffect watching `authenticated`)
-  // 4. We call our API route to get/create their Starknet wallet
-  // 5. StarkZap uses that wallet to sign transactions
-
-  // WHY useEffect for step 3-5?
-  // The Privy popup closes asynchronously. We can't just await login() and
-  // immediately have user data. Instead, we watch the `authenticated` state
-  // change, and THAT triggers the wallet setup.
+  // ── Method B: Social Login ────────────────────────────────────────────────
 
   const connectSocial = useCallback(async () => {
     if (!privyReady) return;
     setStatus("connecting");
     setError(null);
     try {
-      // This opens the Privy popup (Google / Email options)
-      // The rest happens in the useEffect below when `authenticated` becomes true
       await login();
+      // After login() resolves, the useEffect below takes over
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Social login failed";
       setError(msg);
@@ -189,73 +153,64 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [privyReady, login]);
 
-  // This runs whenever Privy's auth state changes.
-  // When the user successfully logs in with Google, `authenticated` becomes true
-  // and `user` has their info. That's our signal to set up their Starknet wallet.
+  // Watches for Privy authentication completing, then sets up the StarkZap wallet
   useEffect(() => {
-    if (!privyReady) return;
-    if (!authenticated || !user) return;
-    // Only run this if we're in "connecting" state (i.e., came from connectSocial)
-    // OR if the user was already logged in when the page loaded
-    if (status === "connected") return; // already set up, skip
+    if (!privyReady || !authenticated || !user) return;
+    if (status === "connected") return;
 
     const setupSocialWallet = async () => {
       try {
         setStatus("connecting");
 
-        // Step 1: Get an access token from Privy
-        // This proves to our API route that this is a real authenticated user
+        // Get Privy access token to authenticate our API call
         const accessToken = await getAccessToken();
 
-        // Step 2: Call our API route to create/get this user's Starknet wallet
-        // Our API route calls Privy server-side to create the wallet
+        // Call our backend to create/get this user's Starknet wallet
         const walletRes = await fetch("/api/wallet/starknet", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${accessToken}`,
           },
-          // We send the Privy user ID so the API can associate the wallet
           body: JSON.stringify({ userId: user.id }),
         });
 
         if (!walletRes.ok) {
-          const err = await walletRes.json();
+          const err = await walletRes.json() as { error?: string };
           throw new Error(err.error ?? "Failed to get wallet");
         }
 
-        const { wallet: privyWallet } = await walletRes.json();
+        const { wallet: privyWallet } = await walletRes.json() as {
+          wallet: { id: string; address: string; publicKey: string }
+        };
 
-        // Step 3: Initialize StarkZap SDK on Sepolia
+        // Initialize StarkZap
         const sdk = new StarkZap({ network: "sepolia" });
 
-        // Step 4: Use StarkZap's Privy strategy to connect the wallet
-        // This creates a StarkZap wallet that:
-        // - Uses Privy's signing (calls /api/wallet/sign for every tx)
-        // - Deploys the account on-chain if it doesn't exist yet
-        // - Handles all the starknet.js complexity for us
+        // WHY window.location.origin:
+        // StarkZap validates that serverUrl is a full absolute URL.
+        // "/api/wallet/sign" is a relative path — it fails validation.
+        // window.location.origin gives us "http://localhost:3000" in dev
+        // and "https://your-app.vercel.app" in production automatically.
+        const serverUrl = `${window.location.origin}/api/wallet/sign`;
+
         const onboard = await sdk.onboard({
           strategy: OnboardStrategy.Privy,
-          accountPreset: accountPresets.argentXV050, // Argent account type
+          accountPreset: accountPresets.argentXV050,
           privy: {
             resolve: async () => ({
               walletId: privyWallet.id,
               publicKey: privyWallet.publicKey,
-              // This tells StarkZap where to send signing requests
-              // It will POST { walletId, hash } to this URL
-              serverUrl: "/api/wallet/sign",
+              serverUrl, // ← full absolute URL, fixes the error
             }),
           },
-          deploy: "if_needed", // Deploy account on-chain if this is first time
+          deploy: "if_needed",
         });
 
-        // Step 5: Extract the account interface from StarkZap
-        // StarkZap's wallet has an `account` property compatible with starknet.js
+        // Extract starknet.js-compatible account from StarkZap wallet
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const starkZapAccount = (onboard.wallet as any).account as AccountInterface;
         const address = onboard.wallet.address.toString();
-
-        // Determine display name from Privy user
         const loginMethod = user.google ? "google" : "email";
 
         setAccount(starkZapAccount);
@@ -278,13 +233,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authenticated, privyReady]);
 
-  // ── Disconnect ───────────────────────────────────────────────────────────────
+  // ── Disconnect ────────────────────────────────────────────────────────────
 
   const disconnect = useCallback(() => {
-    // If connected via social, also log out of Privy
-    if (wallet?.connectionMethod === "social") {
-      logout();
-    }
+    if (wallet?.connectionMethod === "social") logout();
     setWallet(null);
     setAccount(null);
     setBalances(null);
@@ -292,107 +244,74 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setError(null);
   }, [wallet, logout]);
 
-  // Resets a stuck "connecting" state back to disconnected
-  // Called when user cancels the Privy popup
   const resetStatus = useCallback(() => {
     setStatus("disconnected");
     setError(null);
   }, []);
 
-  // ── Contract calls ────────────────────────────────────────────────────────────
+  // ── Contract calls ────────────────────────────────────────────────────────
 
-  const executeMint = useCallback(
-    async (amount: bigint): Promise<string> => {
-      if (!account) throw new Error("Wallet not connected");
-      const { transaction_hash } = await account.execute([
-        {
-          contractAddress: CONTRACTS.token,
-          entrypoint: "mint",
-          calldata: [account.address, ...toU256Calldata(amount)],
-        },
-      ]);
-      await provider.current.waitForTransaction(transaction_hash);
-      await refreshBalances();
-      return transaction_hash;
-    },
-    [account, refreshBalances],
-  );
+  const executeMint = useCallback(async (amount: bigint): Promise<string> => {
+    if (!account) throw new Error("Wallet not connected");
+    const { transaction_hash } = await account.execute([{
+      contractAddress: CONTRACTS.token,
+      entrypoint: "mint",
+      calldata: [account.address, ...toU256Calldata(amount)],
+    }]);
+    await provider.current.waitForTransaction(transaction_hash);
+    await refreshBalances();
+    return transaction_hash;
+  }, [account, refreshBalances]);
 
-  const executeDeposit = useCallback(
-    async (amount: bigint): Promise<string> => {
-      if (!account) throw new Error("Wallet not connected");
-      const { transaction_hash } = await account.execute([
-        {
-          contractAddress: CONTRACTS.token,
-          entrypoint: "approve",
-          calldata: [CONTRACTS.pool, ...toU256Calldata(amount)],
-        },
-        {
-          contractAddress: CONTRACTS.pool,
-          entrypoint: "deposit",
-          calldata: toU256Calldata(amount),
-        },
-      ]);
-      await provider.current.waitForTransaction(transaction_hash);
-      await refreshBalances();
-      return transaction_hash;
-    },
-    [account, refreshBalances],
-  );
+  const executeDeposit = useCallback(async (amount: bigint): Promise<string> => {
+    if (!account) throw new Error("Wallet not connected");
+    const { transaction_hash } = await account.execute([
+      {
+        contractAddress: CONTRACTS.token,
+        entrypoint: "approve",
+        calldata: [CONTRACTS.pool, ...toU256Calldata(amount)],
+      },
+      {
+        contractAddress: CONTRACTS.pool,
+        entrypoint: "deposit",
+        calldata: toU256Calldata(amount),
+      },
+    ]);
+    await provider.current.waitForTransaction(transaction_hash);
+    await refreshBalances();
+    return transaction_hash;
+  }, [account, refreshBalances]);
 
-  const executeWithdraw = useCallback(
-    async (amount: bigint): Promise<string> => {
-      if (!account) throw new Error("Wallet not connected");
-      const { transaction_hash } = await account.execute([
-        {
-          contractAddress: CONTRACTS.pool,
-          entrypoint: "withdraw",
-          calldata: toU256Calldata(amount),
-        },
-      ]);
-      await provider.current.waitForTransaction(transaction_hash);
-      await refreshBalances();
-      return transaction_hash;
-    },
-    [account, refreshBalances],
-  );
+  const executeWithdraw = useCallback(async (amount: bigint): Promise<string> => {
+    if (!account) throw new Error("Wallet not connected");
+    const { transaction_hash } = await account.execute([{
+      contractAddress: CONTRACTS.pool,
+      entrypoint: "withdraw",
+      calldata: toU256Calldata(amount),
+    }]);
+    await provider.current.waitForTransaction(transaction_hash);
+    await refreshBalances();
+    return transaction_hash;
+  }, [account, refreshBalances]);
 
-  const executePrivateTransfer = useCallback(
-    async (recipient: string, amount: bigint): Promise<string> => {
-      if (!account) throw new Error("Wallet not connected");
-      const { transaction_hash } = await account.execute([
-        {
-          contractAddress: CONTRACTS.pool,
-          entrypoint: "private_transfer",
-          calldata: [recipient, ...toU256Calldata(amount)],
-        },
-      ]);
-      await provider.current.waitForTransaction(transaction_hash);
-      await refreshBalances();
-      return transaction_hash;
-    },
-    [account, refreshBalances],
-  );
+  const executePrivateTransfer = useCallback(async (recipient: string, amount: bigint): Promise<string> => {
+    if (!account) throw new Error("Wallet not connected");
+    const { transaction_hash } = await account.execute([{
+      contractAddress: CONTRACTS.pool,
+      entrypoint: "private_transfer",
+      calldata: [recipient, ...toU256Calldata(amount)],
+    }]);
+    await provider.current.waitForTransaction(transaction_hash);
+    await refreshBalances();
+    return transaction_hash;
+  }, [account, refreshBalances]);
 
   return (
-    <WalletContext.Provider
-      value={{
-        status,
-        wallet,
-        balances,
-        isLoadingBalances,
-        error,
-        connect,
-        connectSocial,
-        disconnect,
-        refreshBalances,
-        executeMint,
-        executeDeposit,
-        executeWithdraw,
-        executePrivateTransfer,
-        resetStatus,
-      }}
-    >
+    <WalletContext.Provider value={{
+      status, wallet, balances, isLoadingBalances, error,
+      connect, connectSocial, disconnect, resetStatus, refreshBalances,
+      executeMint, executeDeposit, executeWithdraw, executePrivateTransfer,
+    }}>
       {children}
     </WalletContext.Provider>
   );
