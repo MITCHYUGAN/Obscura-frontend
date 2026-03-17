@@ -34,7 +34,6 @@ export function ConnectModal({ open, onClose }: ConnectModalProps) {
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-md bg-card border border-border/60 shadow-2xl shadow-black/40 p-0 overflow-hidden">
 
-        {/* Header */}
         <DialogHeader className="px-7 pt-7 pb-5 border-b border-border/40">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-lg bg-vault-500/15 border border-vault-500/40 flex items-center justify-center">
@@ -49,10 +48,7 @@ export function ConnectModal({ open, onClose }: ConnectModalProps) {
           </p>
         </DialogHeader>
 
-        {/* Options */}
         <div className="p-5 space-y-3">
-
-          {/* Option 1: Browser Wallet */}
           <button
             onClick={handleWallet}
             disabled={isBusy}
@@ -64,24 +60,18 @@ export function ConnectModal({ open, onClose }: ConnectModalProps) {
               <Wallet className="w-6 h-6 text-vault-400" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-display font-semibold text-lg text-foreground">
-                Browser Wallet
-              </p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Ready, Braavos, or any Starknet wallet
-              </p>
+              <p className="font-display font-semibold text-lg text-foreground">Browser Wallet</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Ready, Braavos, or any Starknet wallet</p>
             </div>
             <ChevronRight className={`w-5 h-5 text-muted-foreground transition-transform duration-150 ${hovering === "wallet" ? "translate-x-0.5 text-vault-400" : ""}`} />
           </button>
 
-          {/* Divider */}
           <div className="flex items-center gap-3 px-1">
             <div className="flex-1 h-px bg-border/40" />
             <span className="text-sm text-muted-foreground/50 font-mono">or</span>
             <div className="flex-1 h-px bg-border/40" />
           </div>
 
-          {/* Option 2: Social Login */}
           <button
             onClick={handleSocial}
             disabled={isBusy}
@@ -93,29 +83,31 @@ export function ConnectModal({ open, onClose }: ConnectModalProps) {
               <Mail className="w-6 h-6 text-vault-400" />
             </div>
             <div className="flex-1 text-left">
-              <p className="font-display font-semibold text-lg text-foreground">
-                Social Login
-              </p>
-              <p className="text-sm text-muted-foreground mt-0.5">
-                Google or Email — no wallet or seed phrase needed
-              </p>
+              <p className="font-display font-semibold text-lg text-foreground">Social Login</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Google or Email — no wallet or seed phrase needed</p>
             </div>
             <ChevronRight className={`w-5 h-5 text-muted-foreground transition-transform duration-150 ${hovering === "social" ? "translate-x-0.5 text-vault-400" : ""}`} />
           </button>
-
         </div>
 
-        {/* Footer note */}
         <div className="px-7 pb-6 pt-1">
           <p className="text-xs text-muted-foreground/40 text-center font-mono">
             Starknet Sepolia · Non-custodial · Testnet only
           </p>
         </div>
-
       </DialogContent>
     </Dialog>
   );
 }
+
+// ── Step messages shown during social login ───────────────────────────────────
+
+const STEP_MESSAGES: Record<string, { label: string; sub: string }> = {
+  authenticating:   { label: "Authenticating...",         sub: "Verifying your account" },
+  creating_wallet:  { label: "Creating wallet...",        sub: "Setting up your Starknet wallet" },
+  deploying_account:{ label: "Deploying account...",      sub: "Publishing your account on Starknet" },
+  finalizing:       { label: "Almost done...",            sub: "Finalizing connection" },
+};
 
 // ── ConnectTrigger ────────────────────────────────────────────────────────────
 
@@ -131,24 +123,17 @@ export function ConnectTrigger({
   variant = "primary",
 }: ConnectTriggerProps) {
   const [open, setOpen] = useState(false);
-  const { status, resetStatus } = useWallet();
+  const { status, connectingStep, resetStatus } = useWallet();
 
-  // WHY this useEffect:
-  // When the user opens the Privy popup and then clicks the X to cancel,
-  // Privy closes its modal but our status is stuck on "connecting".
-  // We detect this by watching: if the modal is closed AND status is still
-  // "connecting" after a short delay, Privy was cancelled — reset to disconnected.
+  // If modal is closed and we're stuck connecting, user cancelled Privy
   useEffect(() => {
-    if (open) return; // modal is open, don't interfere
-    if (status !== "connecting") return; // not stuck, nothing to do
-
-    // Give Privy 300ms to complete naturally before we assume it was cancelled
-    const timer = setTimeout(() => {
-      resetStatus();
-    }, 300);
-
+    if (open) return;
+    if (status !== "connecting") return;
+    // Only reset if there's no active step (means Privy popup was cancelled)
+    if (connectingStep) return;
+    const timer = setTimeout(() => resetStatus(), 300);
     return () => clearTimeout(timer);
-  }, [open, status, resetStatus]);
+  }, [open, status, connectingStep, resetStatus]);
 
   const base = "flex items-center gap-2 px-4 py-2 rounded-lg text-base font-semibold transition-all";
   const styles = {
@@ -156,13 +141,20 @@ export function ConnectTrigger({
     ghost: "border border-border bg-secondary/40 hover:bg-secondary text-foreground",
   };
 
-  // Connecting state — show spinner
-  // But only if the modal is closed (modal closed + connecting = Privy popup is open)
+  // Show step-by-step progress during social login
   if (status === "connecting" && !open) {
+    const step = connectingStep ? STEP_MESSAGES[connectingStep] : null;
     return (
-      <div className={`${base} ${styles[variant]} ${className} opacity-80 cursor-not-allowed`}>
-        <Loader2 className="w-4 h-4 animate-spin" />
-        Connecting...
+      <div className={`${base} ${styles[variant]} ${className} opacity-90 cursor-not-allowed flex-col items-start gap-0.5 py-3`}>
+        <div className="flex items-center gap-2 w-full">
+          <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
+          <span className="text-sm font-semibold">
+            {step?.label ?? "Connecting..."}
+          </span>
+        </div>
+        {step?.sub && (
+          <span className="text-xs opacity-70 pl-6">{step.sub}</span>
+        )}
       </div>
     );
   }

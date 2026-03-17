@@ -6,6 +6,7 @@
 [![Network: Starknet Sepolia](https://img.shields.io/badge/Network-Starknet%20Sepolia-purple)](https://sepolia.voyager.online)
 [![Cairo 2.16](https://img.shields.io/badge/Cairo-2.16.0-orange)](https://book.cairo-lang.org)
 [![Next.js 15](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org)
+[![Built with StarkZap](https://img.shields.io/badge/Built%20with-StarkZap-teal)](https://starkzap.io)
 
 ---
 
@@ -29,7 +30,6 @@ Obscura is a shielded payment pool for strkBTC (wrapped Bitcoin) on Starknet. Us
 ---
 
 ## How It Works
-
 ```
 Wallet A                ShieldedPool              Wallet B
    │                         │                        │
@@ -61,12 +61,25 @@ Wallet A                ShieldedPool              Wallet B
 | Recipient address | ❌ Visible in calldata | ✅ Hidden via ZK proof |
 | Amount | ❌ Visible in calldata | ✅ Hidden via ZK proof |
 
-**v2 roadmap:** ZK commitment-nullifier system using [Garaga](https://github.com/keep-starknet-strange/garaga) on Starknet. Deposit creates a cryptographic commitment. Withdrawal requires a ZK proof of knowledge — revealing nothing about which deposit it corresponds to.
+**v2 roadmap:** ZK commitment-nullifier system using something like [Garaga](https://github.com/keep-starknet-strange/garaga) on Starknet. Deposit creates a cryptographic commitment. Withdrawal requires a ZK proof of knowledge — revealing nothing about which deposit it corresponds to.
+
+---
+
+## StarkZap Integration
+
+Obscura uses [StarkZap](https://starkzap.io) for two features:
+
+**Social Login (Wallets module)**
+Users can sign in with Google or Email via Privy — no seed phrases, no wallet extension required. StarkZap's Privy strategy creates and manages a Starknet account for each user, with signing handled server-side through a Next.js API route.
+
+**Gasless Transactions (Paymaster module)**
+All transactions for social login users are sponsored by AVNU paymaster. Users pay zero gas fees — no STRK required. Deployment of new accounts is also fully sponsored.
+
+Browser wallet users (Ready, Braavos) connect directly via `get-starknet-core` and pay their own gas as normal.
 
 ---
 
 ## Contract Interface
-
 ```cairo
 // Deposit strkBTC into the shielded pool (requires prior approve)
 fn deposit(ref self, amount: u256)
@@ -89,7 +102,6 @@ fn get_token_address(self) -> ContractAddress
 ---
 
 ## Project Structure
-
 ```
 Obscura/
 ├── obscura-contract/          # Cairo smart contracts
@@ -102,13 +114,15 @@ Obscura/
 └── obscura-ui/                # Next.js 15 frontend
     ├── app/
     │   ├── page.tsx           # Landing page
-    │   └── app/page.tsx       # Main dapp
+    │   ├── app/page.tsx       # Main dapp
+    │   └── api/
+    │       └── wallet/        # Privy signing backend
     ├── store/
     │   └── wallet-context.tsx # Wallet + contract state
     ├── lib/
     │   └── contracts.ts       # ABIs, addresses, helpers
     └── components/
-        └── pool/              # Deposit, Withdraw, Transfer, Faucet
+        └── frontend/          # Connect modal, wallet UI
 ```
 
 ---
@@ -120,27 +134,25 @@ Obscura/
 - [Scarb](https://docs.swmansion.com/scarb/) 2.16.0
 - [Starknet Foundry](https://foundry-rs.github.io/starknet-foundry/) 0.57.0
 - Node.js 18+
-- Ready or Braavos browser wallet
+- Ready or Braavos browser wallet (optional — social login works without one)
 
 ### Run the frontend
-
 ```bash
 cd obscura-ui
 npm install
-cp .env.example .env.local   # fill in contract addresses
+cp .env.example .env.local   # fill in your keys
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
 
 ### Run contract tests
-
 ```bash
 cd obscura-contract
 snforge test
 ```
 
-All 6 tests should pass:
+All 6 tests pass:
 ```
 test_deposit ✅
 test_withdraw ✅
@@ -151,11 +163,19 @@ test_approval_guard ✅
 ```
 
 ### Environment variables
-
 ```env
+# Contract addresses
 NEXT_PUBLIC_POOL_ADDRESS=0x07ea10d54e14be50974a21d1f0849ae9eab3956e09aad6d72339b0ae29ad1589
 NEXT_PUBLIC_TOKEN_ADDRESS=0x02b3bf9216449824c8731ac74722c3b691aad2c49ae628489cd03142934eb920
 NEXT_PUBLIC_RPC_URL=https://api.zan.top/public/starknet-sepolia/rpc/v0_10
+
+# Privy — social login (https://privy.io)
+PRIVY_APP_ID=your-privy-app-id
+PRIVY_APP_SECRET=your-privy-app-secret
+NEXT_PUBLIC_PRIVY_APP_ID=your-privy-app-id
+
+# AVNU Paymaster — gasless transactions (https://portal.avnu.fi)
+NEXT_PUBLIC_AVNU_API_KEY=your-avnu-api-key
 ```
 
 ---
@@ -168,8 +188,11 @@ NEXT_PUBLIC_RPC_URL=https://api.zan.top/public/starknet-sepolia/rpc/v0_10
 | Token standard | OpenZeppelin ERC20 for Cairo |
 | Testing | Starknet Foundry (snforge) |
 | Frontend | Next.js 15, TypeScript, Tailwind v4 |
-| Wallet connection | get-starknet-core, starknet.js v9 |
-| Wallets supported | Ready, Braavos |
+| Wallet SDK | StarkZap v1 |
+| Social login | Privy (via StarkZap) |
+| Gasless transactions | AVNU Paymaster (via StarkZap) |
+| Browser wallets | get-starknet-core, starknet.js v9 |
+| Wallets supported | Ready, Braavos, Google, Email |
 | Network | Starknet Sepolia |
 
 ---
@@ -184,14 +207,20 @@ For maximum privacy using v1:
 
 On-chain result: Wallet A deposited. Wallet B withdrew. No transaction, event, or record connects them.
 
+Social login users can create a second account with a different email to achieve this flow entirely without a browser wallet.
+
 ---
 
 ## Roadmap
 
-**v1 (current — hackathon MVP)**
-- [x] Shielded pool smart contract
+**v1 (current)**
+- [x] Shielded pool Cairo smart contract
 - [x] Zero-event private transfers
-- [x] Full frontend with wallet connection
+- [x] Batch transfers
+- [x] Full frontend with connect modal
+- [x] Browser wallet support (Ready, Braavos)
+- [x] Social login via StarkZap + Privy (Google, Email)
+- [x] Gasless transactions via StarkZap + AVNU paymaster
 - [x] Live on Starknet Sepolia
 
 **v2 (post-hackathon)**
@@ -202,13 +231,6 @@ On-chain result: Wallet A deposited. Wallet B withdrew. No transaction, event, o
 - [ ] Fixed denomination deposits (Tornado Cash model)
 - [ ] Relayer support for gas-free withdrawals
 - [ ] Mainnet deployment
-- [ ] Batch transfers
-
----
-
-## Built At
-
-Starknet Hacker House Hackathon — March 2026
 
 ---
 
