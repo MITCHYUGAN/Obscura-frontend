@@ -19,6 +19,7 @@ export function Providers({ children }: { children: ReactNode }) {
         appearance: {
           theme: "dark",
           accentColor: "#10b981",
+          showWalletLoginFirst: false,
         },
         // Privy v3 config — no createOnLogin here, that key moved
         // We handle wallet creation manually in our API route
