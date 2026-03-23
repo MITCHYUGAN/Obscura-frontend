@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Shield, Wallet, Mail, ChevronRight, Loader2 } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Shield, Wallet, Mail, ChevronRight, Loader2, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -33,7 +33,6 @@ export function ConnectModal({ open, onClose }: ConnectModalProps) {
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent className="sm:max-w-md bg-card border border-border/60 shadow-2xl shadow-black/40 p-0 overflow-hidden">
-
         <DialogHeader className="px-7 pt-7 pb-5 border-b border-border/40">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-lg bg-vault-500/15 border border-vault-500/40 flex items-center justify-center">
@@ -100,13 +99,12 @@ export function ConnectModal({ open, onClose }: ConnectModalProps) {
   );
 }
 
-// ── Step messages shown during social login ───────────────────────────────────
+// ── Step messages — only shown after Privy auth succeeds ──────────────────────
 
 const STEP_MESSAGES: Record<string, { label: string; sub: string }> = {
-  authenticating:   { label: "Authenticating...",         sub: "Verifying your account" },
-  creating_wallet:  { label: "Creating wallet...",        sub: "Setting up your Starknet wallet" },
-  deploying_account:{ label: "Deploying account...",      sub: "Publishing your account on Starknet" },
-  finalizing:       { label: "Almost done...",            sub: "Finalizing connection" },
+  creating_wallet:   { label: "Creating wallet...",   sub: "Setting up your Starknet wallet" },
+  deploying_account: { label: "Deploying account...", sub: "Publishing your account on Starknet" },
+  finalizing:        { label: "Almost done...",       sub: "Finalizing connection" },
 };
 
 // ── ConnectTrigger ────────────────────────────────────────────────────────────
@@ -124,15 +122,44 @@ export function ConnectTrigger({
 }: ConnectTriggerProps) {
   const [open, setOpen] = useState(false);
   const { status, connectingStep, resetStatus } = useWallet();
+  const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // If modal is closed and we're stuck connecting, user cancelled Privy
   useEffect(() => {
-    if (open) return;
-    if (status !== "connecting") return;
-    // Only reset if there's no active step (means Privy popup was cancelled)
-    if (connectingStep) return;
-    const timer = setTimeout(() => resetStatus(), 300);
-    return () => clearTimeout(timer);
+    // Clean up timer when flow finishes or moves forward
+    if (status !== "connecting" || connectingStep !== null) {
+      if (cancelTimerRef.current) {
+        clearTimeout(cancelTimerRef.current);
+        cancelTimerRef.current = null;
+      }
+      return;
+    }
+
+    // Here: status="connecting", connectingStep=null, our modal is closed
+    // This means Privy popup is either open OR was just cancelled.
+    //
+    // WHY 2 seconds works now:
+    // - connectSocial() now sets connectingStep=null (not "authenticating")
+    // - If Privy succeeds, setupSocialWallet runs and sets connectingStep
+    //   to "creating_wallet" almost immediately
+    // - If user cancels, connectingStep stays null indefinitely
+    // - So 2 seconds stuck on null = definitely cancelled
+    if (!open && !cancelTimerRef.current) {
+      cancelTimerRef.current = setTimeout(() => {
+        cancelTimerRef.current = null;
+        resetStatus();
+      }, 2000);
+    }
+
+    if (open && cancelTimerRef.current) {
+      clearTimeout(cancelTimerRef.current);
+      cancelTimerRef.current = null;
+    }
+
+    return () => {
+      if (cancelTimerRef.current) {
+        clearTimeout(cancelTimerRef.current);
+      }
+    };
   }, [open, status, connectingStep, resetStatus]);
 
   const base = "flex items-center gap-2 px-4 py-2 rounded-lg text-base font-semibold transition-all";
@@ -141,20 +168,41 @@ export function ConnectTrigger({
     ghost: "border border-border bg-secondary/40 hover:bg-secondary text-foreground",
   };
 
-  // Show step-by-step progress during social login
   if (status === "connecting" && !open) {
     const step = connectingStep ? STEP_MESSAGES[connectingStep] : null;
+
+    // No step = Privy popup is open, waiting for user
+    if (!step) {
+      return (
+        <div className={`flex flex-col gap-1 ${className}`}>
+          <div className={`${base} ${styles[variant]} opacity-80 cursor-not-allowed w-full justify-center`}>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span className="text-sm font-semibold">Waiting for login...</span>
+          </div>
+          <button
+            onClick={() => {
+              if (cancelTimerRef.current) {
+                clearTimeout(cancelTimerRef.current);
+                cancelTimerRef.current = null;
+              }
+              resetStatus();
+            }}
+            className="flex items-center justify-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+          >
+            <X className="w-3 h-3" /> Cancel
+          </button>
+        </div>
+      );
+    }
+
+    // Step is active = real progress after Privy auth succeeded
     return (
       <div className={`${base} ${styles[variant]} ${className} opacity-90 cursor-not-allowed flex-col items-start gap-0.5 py-3`}>
         <div className="flex items-center gap-2 w-full">
           <Loader2 className="w-4 h-4 animate-spin flex-shrink-0" />
-          <span className="text-sm font-semibold">
-            {step?.label ?? "Connecting..."}
-          </span>
+          <span className="text-sm font-semibold">{step.label}</span>
         </div>
-        {step?.sub && (
-          <span className="text-xs opacity-70 pl-6">{step.sub}</span>
-        )}
+        <span className="text-xs opacity-70 pl-6">{step.sub}</span>
       </div>
     );
   }

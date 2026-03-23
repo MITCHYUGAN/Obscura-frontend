@@ -1,16 +1,11 @@
 "use client";
 
-import React, {
-  createContext, useContext, useState, useCallback,
-  useEffect, useRef, type ReactNode,
-} from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { getStarknet } from "get-starknet-core";
 import { RpcProvider, type AccountInterface } from "starknet";
 import { StarkZap, OnboardStrategy, accountPresets } from "starkzap";
-import {
-  CONTRACTS, RPC_URL, formatAmount, shortenAddress, toU256Calldata,
-} from "@/lib/contracts";
+import { CONTRACTS, RPC_URL, formatAmount, shortenAddress, toU256Calldata } from "@/lib/contracts";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -18,12 +13,7 @@ export type ConnectionMethod = "browser_wallet" | "social";
 export type WalletStatus = "disconnected" | "connecting" | "connected" | "error";
 
 // Status messages shown to the user during social login flow
-export type ConnectingStep =
-  | "authenticating"
-  | "creating_wallet"
-  | "deploying_account"
-  | "finalizing"
-  | null;
+export type ConnectingStep = "authenticating" | "creating_wallet" | "deploying_account" | "finalizing" | null;
 
 export interface ConnectedWallet {
   address: string;
@@ -65,12 +55,7 @@ const WalletContext = createContext<WalletContextValue | null>(null);
 
 // ── Raw RPC helper ────────────────────────────────────────────────────────────
 
-async function callContract(
-  provider: RpcProvider,
-  contractAddress: string,
-  entrypoint: string,
-  calldata: string[] = []
-): Promise<bigint> {
+async function callContract(provider: RpcProvider, contractAddress: string, entrypoint: string, calldata: string[] = []): Promise<bigint> {
   try {
     const result = await provider.callContract({ contractAddress, entrypoint, calldata });
     if (!result || result.length === 0) return BigInt(0);
@@ -109,9 +94,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // Browser wallet → raw account.execute()
   // Social → StarkZap wallet.execute() which includes AVNU paymaster
 
-  const executeTransaction = useCallback(async (
-    calls: { contractAddress: string; entrypoint: string; calldata: string[] }[]
-  ): Promise<string> => {
+  const executeTransaction = useCallback(async (calls: { contractAddress: string; entrypoint: string; calldata: string[] }[]): Promise<string> => {
     const method = connectionMethodRef.current;
 
     if (method === "social" && starkZapWalletRef.current) {
@@ -143,7 +126,9 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         callContract(provider.current, CONTRACTS.pool, "get_pool_balance", []),
       ]);
       setBalances({
-        tokenRaw, shieldedRaw, poolRaw,
+        tokenRaw,
+        shieldedRaw,
+        poolRaw,
         token: formatAmount(tokenRaw),
         shielded: formatAmount(shieldedRaw),
         pool: formatAmount(poolRaw),
@@ -197,10 +182,14 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const connectSocial = useCallback(async () => {
     if (!privyReady) return;
     setStatus("connecting");
-    setConnectingStep("authenticating");
+    setConnectingStep(null); // ← null while waiting for Privy popup
     setError(null);
     try {
       await login();
+      // login() resolves when Privy popup closes (success OR cancel)
+      // If user cancelled, authenticated stays false → useEffect won't run
+      // If user succeeded, authenticated becomes true → useEffect runs
+      // Either way, connectingStep stays null here until setupSocialWallet sets it
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Social login failed";
       setError(msg);
@@ -216,12 +205,10 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     const setupSocialWallet = async () => {
       try {
         setStatus("connecting");
-        setConnectingStep("authenticating");
+        // Privy auth already completed — go straight to wallet creation
+        setConnectingStep("creating_wallet");
 
         const accessToken = await getAccessToken();
-
-        // Step: create/get Privy wallet
-        setConnectingStep("creating_wallet");
 
         const walletRes = await fetch("/api/wallet/starknet", {
           method: "POST",
@@ -233,11 +220,11 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         });
 
         if (!walletRes.ok) {
-          const err = await walletRes.json() as { error?: string };
+          const err = (await walletRes.json()) as { error?: string };
           throw new Error(err.error ?? "Failed to get wallet");
         }
 
-        const { wallet: privyWallet } = await walletRes.json() as {
+        const { wallet: privyWallet } = (await walletRes.json()) as {
           wallet: { id: string; address: string; publicKey: string };
         };
 
@@ -328,68 +315,98 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   // ── Contract calls — all go through executeTransaction() ─────────────────
   // executeTransaction() automatically routes to the right executor
 
-  const executeMint = useCallback(async (amount: bigint): Promise<string> => {
-    const address = connectionMethodRef.current === "social"
-      ? starkZapWalletRef.current?.address?.toString()
-      : browserAccountRef.current?.address;
-    if (!address) throw new Error("Wallet not connected");
+  const executeMint = useCallback(
+    async (amount: bigint): Promise<string> => {
+      const address = connectionMethodRef.current === "social" ? starkZapWalletRef.current?.address?.toString() : browserAccountRef.current?.address;
+      if (!address) throw new Error("Wallet not connected");
 
-    const hash = await executeTransaction([{
-      contractAddress: CONTRACTS.token,
-      entrypoint: "mint",
-      calldata: [address, ...toU256Calldata(amount)],
-    }]);
-    await provider.current.waitForTransaction(hash);
-    await refreshBalances();
-    return hash;
-  }, [executeTransaction, refreshBalances]);
+      const hash = await executeTransaction([
+        {
+          contractAddress: CONTRACTS.token,
+          entrypoint: "mint",
+          calldata: [address, ...toU256Calldata(amount)],
+        },
+      ]);
+      await provider.current.waitForTransaction(hash);
+      await refreshBalances();
+      return hash;
+    },
+    [executeTransaction, refreshBalances],
+  );
 
-  const executeDeposit = useCallback(async (amount: bigint): Promise<string> => {
-    const hash = await executeTransaction([
-      {
-        contractAddress: CONTRACTS.token,
-        entrypoint: "approve",
-        calldata: [CONTRACTS.pool, ...toU256Calldata(amount)],
-      },
-      {
-        contractAddress: CONTRACTS.pool,
-        entrypoint: "deposit",
-        calldata: toU256Calldata(amount),
-      },
-    ]);
-    await provider.current.waitForTransaction(hash);
-    await refreshBalances();
-    return hash;
-  }, [executeTransaction, refreshBalances]);
+  const executeDeposit = useCallback(
+    async (amount: bigint): Promise<string> => {
+      const hash = await executeTransaction([
+        {
+          contractAddress: CONTRACTS.token,
+          entrypoint: "approve",
+          calldata: [CONTRACTS.pool, ...toU256Calldata(amount)],
+        },
+        {
+          contractAddress: CONTRACTS.pool,
+          entrypoint: "deposit",
+          calldata: toU256Calldata(amount),
+        },
+      ]);
+      await provider.current.waitForTransaction(hash);
+      await refreshBalances();
+      return hash;
+    },
+    [executeTransaction, refreshBalances],
+  );
 
-  const executeWithdraw = useCallback(async (amount: bigint): Promise<string> => {
-    const hash = await executeTransaction([{
-      contractAddress: CONTRACTS.pool,
-      entrypoint: "withdraw",
-      calldata: toU256Calldata(amount),
-    }]);
-    await provider.current.waitForTransaction(hash);
-    await refreshBalances();
-    return hash;
-  }, [executeTransaction, refreshBalances]);
+  const executeWithdraw = useCallback(
+    async (amount: bigint): Promise<string> => {
+      const hash = await executeTransaction([
+        {
+          contractAddress: CONTRACTS.pool,
+          entrypoint: "withdraw",
+          calldata: toU256Calldata(amount),
+        },
+      ]);
+      await provider.current.waitForTransaction(hash);
+      await refreshBalances();
+      return hash;
+    },
+    [executeTransaction, refreshBalances],
+  );
 
-  const executePrivateTransfer = useCallback(async (recipient: string, amount: bigint): Promise<string> => {
-    const hash = await executeTransaction([{
-      contractAddress: CONTRACTS.pool,
-      entrypoint: "private_transfer",
-      calldata: [recipient, ...toU256Calldata(amount)],
-    }]);
-    await provider.current.waitForTransaction(hash);
-    await refreshBalances();
-    return hash;
-  }, [executeTransaction, refreshBalances]);
+  const executePrivateTransfer = useCallback(
+    async (recipient: string, amount: bigint): Promise<string> => {
+      const hash = await executeTransaction([
+        {
+          contractAddress: CONTRACTS.pool,
+          entrypoint: "private_transfer",
+          calldata: [recipient, ...toU256Calldata(amount)],
+        },
+      ]);
+      await provider.current.waitForTransaction(hash);
+      await refreshBalances();
+      return hash;
+    },
+    [executeTransaction, refreshBalances],
+  );
 
   return (
-    <WalletContext.Provider value={{
-      status, connectingStep, wallet, balances, isLoadingBalances, error,
-      connect, connectSocial, disconnect, resetStatus, refreshBalances,
-      executeMint, executeDeposit, executeWithdraw, executePrivateTransfer,
-    }}>
+    <WalletContext.Provider
+      value={{
+        status,
+        connectingStep,
+        wallet,
+        balances,
+        isLoadingBalances,
+        error,
+        connect,
+        connectSocial,
+        disconnect,
+        resetStatus,
+        refreshBalances,
+        executeMint,
+        executeDeposit,
+        executeWithdraw,
+        executePrivateTransfer,
+      }}
+    >
       {children}
     </WalletContext.Provider>
   );

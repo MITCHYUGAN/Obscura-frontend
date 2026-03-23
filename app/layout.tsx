@@ -17,6 +17,9 @@ const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-body", weight: ["
 export const metadata: Metadata = {
   title: "Obscura — Private strkBTC Payments on Starknet",
   description: "Deposit strkBTC and receive a shielded note. Withdraw to any address with no on-chain link.",
+  icons: {
+    icon: "/favicon.png"
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
