@@ -60,7 +60,7 @@ export function ConnectModal({ open, onClose }: ConnectModalProps) {
             </div>
             <div className="flex-1 text-left">
               <p className="font-display font-semibold text-lg text-foreground">Browser Wallet</p>
-              <p className="text-sm text-muted-foreground mt-0.5">Ready, Braavos, or any Starknet wallet</p>
+              <p className="text-sm text-muted-foreground mt-0.5">Ready, Xverse, Braavos, or any Starknet wallet</p>
             </div>
             <ChevronRight className={`w-5 h-5 text-muted-foreground transition-transform duration-150 ${hovering === "wallet" ? "translate-x-0.5 text-vault-400" : ""}`} />
           </button>

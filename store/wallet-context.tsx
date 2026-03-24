@@ -18,7 +18,7 @@ export type ConnectingStep = "authenticating" | "creating_wallet" | "deploying_a
 export interface ConnectedWallet {
   address: string;
   shortAddress: string;
-  walletType: "ready" | "braavos" | "google" | "email" | "unknown";
+  walletType: "ready" | "braavos" | "xverse" | "google" | "email" | "unknown";
   connectionMethod: ConnectionMethod;
 }
 
@@ -153,17 +153,53 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     try {
       const sn = getStarknet();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const wallets: any[] = await sn.getAvailableWallets();
-      if (!wallets.length) throw new Error("No Starknet wallet found. Install Ready or Braavos.");
+      const allWallets: any[] = await sn.getAvailableWallets();
+
+      // ── Filter to Starknet-only wallets ──────────────────────────────────────
+      // get-starknet-core returns ALL injected wallets — including Keplr, MetaMask,
+      // OKX, and others that inject a Starknet-like interface but aren't real
+      // Starknet wallets. We filter by known Starknet wallet IDs.
+      //
+      // How to identify a wallet's ID: each wallet extension sets window.starknet_*
+      // with a specific key. The `id` field on the wallet object matches that key.
+      // Known Starknet wallet IDs:
+
+      const STARKNET_WALLET_IDS = [
+        "argentX", // Ready wallet (formerly Argent X)
+        "braavos", // Braavos
+        "xverse", // Xverse (BTC wallet with Starknet support)
+        "okxwallet", // OKX has a Starknet mode — include if you want
+      ];
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const chosen: any = wallets.find((w: any) => w.id?.includes("ready")) ?? wallets[0];
-      await chosen.enable({ starknetVersion: "v5" });
+      const wallets = allWallets.filter((w: any) => STARKNET_WALLET_IDS.some((id) => w.id?.toLowerCase().includes(id.toLowerCase())));
+
+      if (!wallets.length) {
+        // If no known wallets found but wallets exist, fall back and explain
+        if (allWallets.length > 0) {
+          throw new Error("No supported Starknet wallet found. Please install Ready, Braavos, or Xverse.");
+        }
+        throw new Error("No wallet found. Install Ready or Braavos to continue.");
+      }
+
+      // Prefer Ready > Braavos > Xverse > first available
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const chosen: any =
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        wallets.find((w: any) => w.id?.toLowerCase().includes("argentx") || w.id?.toLowerCase().includes("ready")) ??
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        wallets.find((w: any) => w.id?.toLowerCase().includes("braavos")) ??
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        wallets.find((w: any) => w.id?.toLowerCase().includes("xverse")) ??
+        wallets[0];
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const acc: any = chosen.account;
       if (!acc) throw new Error("Wallet did not return an account.");
+
       const address: string = acc.address as string;
       const id: string = (chosen.id as string) ?? "";
-      const walletType = id.includes("ready") ? "ready" : id.includes("braavos") ? "braavos" : "unknown";
+      const walletType = id.includes("ready") ? "ready" : id.includes("braavos") ? "braavos" : id.includes("xverse") ? "xverse" : "unknown";
 
       browserAccountRef.current = acc as AccountInterface;
       connectionMethodRef.current = "browser_wallet";

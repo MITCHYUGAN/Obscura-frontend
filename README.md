@@ -75,7 +75,7 @@ Users can sign in with Google or Email via Privy — no seed phrases, no wallet 
 **Gasless Transactions (Paymaster module)**
 All transactions for social login users are sponsored by AVNU paymaster. Users pay zero gas fees — no STRK required. Deployment of new accounts is also fully sponsored.
 
-Browser wallet users (Ready, Braavos) connect directly via `get-starknet-core` and pay their own gas as normal.
+Browser wallet users (Ready, Xverse, Braavos) connect directly via `get-starknet-core` and pay their own gas as normal.
 
 ---
 
@@ -134,7 +134,7 @@ Obscura/
 - [Scarb](https://docs.swmansion.com/scarb/) 2.16.0
 - [Starknet Foundry](https://foundry-rs.github.io/starknet-foundry/) 0.57.0
 - Node.js 18+
-- Ready or Braavos browser wallet (optional — social login works without one)
+- Ready, Xverse, or Braavos browser wallet (optional — social login works without one)
 
 ### Run the frontend
 ```bash
@@ -192,7 +192,7 @@ NEXT_PUBLIC_AVNU_API_KEY=your-avnu-api-key
 | Social login | Privy (via StarkZap) |
 | Gasless transactions | AVNU Paymaster (via StarkZap) |
 | Browser wallets | get-starknet-core, starknet.js v9 |
-| Wallets supported | Ready, Braavos, Google, Email |
+| Wallets supported | Ready, Xverse, Braavos, Google, Email |
 | Network | Starknet Sepolia |
 
 ---
@@ -218,7 +218,7 @@ Social login users can create a second account with a different email to achieve
 - [x] Zero-event private transfers
 - [x] Batch transfers
 - [x] Full frontend with connect modal
-- [x] Browser wallet support (Ready, Braavos)
+- [x] Browser wallet support (Ready, Xverse, Braavos)
 - [x] Social login via StarkZap + Privy (Google, Email)
 - [x] Gasless transactions via StarkZap + AVNU paymaster
 - [x] Live on Starknet Sepolia

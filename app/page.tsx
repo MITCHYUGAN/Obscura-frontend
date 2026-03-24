@@ -138,7 +138,7 @@ function HowItWorks() {
       icon: <ArrowDownToLine className="w-5 h-5" />,
       title: "Connect & Deposit",
       color: "vault",
-      body: "Sign in with Google or Email — no wallet extension needed. Or connect Ready/Braavos directly. Approve and deposit strkBTC into the ShieldedPool. The deposit is public on-chain.",
+      body: "Sign in with Google or Email — no wallet extension needed. Or connect Ready/Xverse/Braavos directly. Approve and deposit strkBTC into the ShieldedPool. The deposit is public on-chain.",
     },
     {
       n: "02",
@@ -307,7 +307,7 @@ function TechStack() {
             ["OpenZeppelin", "ERC20 standard"],
             ["Next.js 15", "React framework"],
             ["starknet.js v9", "Chain client"],
-            ["Ready / Braavos", "Browser wallets"],
+            ["Ready / Xverse / Braavos", "Browser wallets"],
           ].map(([name, desc]) => (
             <div key={name} className="px-4 py-2 rounded-lg border border-border/50 bg-secondary/30 flex items-center gap-2 text-sm hover:border-vault-700/40 hover:bg-vault-950/20 transition-all">
               <Layers className="w-3.5 h-3.5 text-vault-500/60" />
@@ -342,7 +342,7 @@ function FAQ() {
     },
     {
       q: "Does Obscura have a backend or server?",
-      a: "Partly. For social login users, we use a lightweight Next.js API route that communicates with Privy to sign transactions server-side. This backend holds no funds and has no custody — it only relays signing requests. Browser wallet users (Ready, Braavos) are fully client-side with no backend involvement.",
+      a: "Partly. For social login users, we use a lightweight Next.js API route that communicates with Privy to sign transactions server-side. This backend holds no funds and has no custody — it only relays signing requests. Browser wallet users (Ready, Xverse, Braavos) are fully client-side with no backend involvement.",
     },
     {
       q: "Do I need a crypto wallet to use Obscura?",
